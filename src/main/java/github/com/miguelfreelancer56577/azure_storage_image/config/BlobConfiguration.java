@@ -1,10 +1,16 @@
 package github.com.miguelfreelancer56577.azure_storage_image.config;
 
+import github.com.miguelfreelancer56577.azure_storage_image.config.exception.BlobConfigurationException;
+
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
+import java.util.Objects;
 
 import javax.validation.constraints.NotNull;
 
+import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.context.annotation.Bean;
@@ -22,26 +28,40 @@ import com.microsoft.azure.storage.blob.CloudBlobContainer;
  *
  */
 @Configuration
+@Slf4j
 public class BlobConfiguration
 {
 
-	@Value("${azure.storage.connection-string}")
+	protected static final String defult = "defult";
+	
+	@Value("${azure.storage.connection-string:defult}")
 	protected String StorageConnectionString;
 
-	@Value("${container.name}")
+	@Value("${container.name:defult}")
 	protected String containerName;
-
+	
 	/**
 	 * Get a CloudBlobClient to manage any blob file
 	 *
 	 * @return
+	 * @throws BlobConfigurationException 
 	 * @throws InvalidKeyException
 	 * @throws URISyntaxException
 	 */
 	@Bean
-	protected CloudBlobClient getCloudBlobClientInstance() throws InvalidKeyException, URISyntaxException
+	protected CloudBlobClient getCloudBlobClientInstance() throws BlobConfigurationException
 	{
-		return CloudStorageAccount.parse(this.StorageConnectionString).createCloudBlobClient();
+		try {
+			if(defult.equals(this.StorageConnectionString)){
+				log.info("There is no connection string to get a client bean {}.", "getCloudBlobClientInstance");
+//				return a null value for this bean 
+				return null;
+			}
+//			return a new client top use blob storage
+			return CloudStorageAccount.parse(this.StorageConnectionString).createCloudBlobClient();
+		} catch (Exception e) {
+			throw new BlobConfigurationException(e);
+		}
 	}
 
 	/**
@@ -49,24 +69,25 @@ public class BlobConfiguration
 	 *
 	 * @param blobClient
 	 * @return
+	 * @throws BlobConfigurationException 
 	 */
 	@Bean
-	@NotNull
-	@ConditionalOnBean(CloudBlobClient.class)
-	protected CloudBlobContainer getCloudBlobContainerInstance(CloudBlobClient blobClient)
+	protected CloudBlobContainer getCloudBlobContainerInstance(@Autowired(required = false) CloudBlobClient blobClient) throws BlobConfigurationException
 	{
-		CloudBlobContainer container = null;
 		try
 		{
-			container = blobClient.getContainerReference(this.containerName);
+			if(Objects.isNull(blobClient)){
+				log.info("There is no blob client to create this bean {}." , "getCloudBlobContainerInstance");
+				return null;
+			}
+			CloudBlobContainer container = blobClient.getContainerReference(this.containerName);
 			container.createIfNotExists();
+			return container;
 		}
-		catch (URISyntaxException | StorageException e)
+		catch (Exception e)
 		{
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			throw new BlobConfigurationException(e);
 		}
-		return container;
 	}
 
 }
